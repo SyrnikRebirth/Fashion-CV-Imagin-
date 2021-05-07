@@ -10,7 +10,8 @@ class Face_quality:
                  contrast_param=0.225, 
                  face_size_param=200, 
                  face_in_pic_ratio=0.3, 
-                 eyes_to_face_param = 0.35
+                 eyes_to_face_param=0.35
+                 ideal_eyes_to_face_param=0.42
         ):
         self.cr = Cropper()
         self.contrast_param = contrast_param
@@ -18,37 +19,56 @@ class Face_quality:
         self.face_in_pic_ratio = face_in_pic_ratio
         self.eyes_to_face_param = eyes_to_face_param
 
-    def check_face_quality(self, image):
+    def get_face_quality_grade(self, image): 
+        face_quality_grade = 0
+
         widht = np.shape(image)[1]
         hight = np.shape(image)[0]
-        
+
         landmarks = cr.get_mp_landmarks(image)
         if landmarks is None:
-            raise Exception("I can't find face")
-        
+            print("I can't find face")
+            return face_quality_grade
+
         face_cords = self.cr.get_face_rectangle(image)
-        try:
-            picture_is_contrast_enogh(image)
-            face_is_big_enogh(face_cords)
-            face_fully_in_picture(widht, hight, face_cords)
-            eyes_to_face_ratio(image, landmarks)
-        except Exception as e:
-            print(e)
-            
-            
+        
+        if picture_is_contrast_enogh(image) == 0:
+            return (0, "This picture is too dim")
+
+        if face_is_big_enogh(face_cords) == 0:
+            return (0, "Face size is smaller than " + str(self.face_size_param) + " pixels")
+        
+        face_in_pic_ratio = face_fully_in_picture(widht, hight, face_cords)
+        # check if face is in picture enough
+        if face_in_pic_ratio > self.face_in_pic_ratio:
+            return (0, "More than " + str(self.face_in_pic_ratio * 100) + "% of your face is not in the picture")
+        else:
+            face_quality_grade += round(face_in_pic_ratio / 0.2)
+        
+
+        head_rotation_ratio = eyes_to_face_ratio(image, landmarks)
+        if head_rotation_ratio <= eyes_to_face_param:
+            return (0, "It seems that your face is turned too much to the side, think about taking another picture")
+        else:
+            one_grade_step = (self.ideal_eyes_to_face_param - self.eyes_to_face_param) / 5
+            face_quality_grade += round(head_rotation_ratio / one_grade_step)
+        
+        return (face_quality_grade, "Heeey handsome"
+     
     def picture_is_contrast_enogh(self, image):
         #We use skimage function, that measures contrast
         if is_low_contrast(image, self.contrast_param):
-            raise Exception("This picture is too dim") 
-        return True
+            return 0
+        else:
+            return 1
     
     def face_is_big_enogh(self, face_cords):
         #We check whether there are enough pixels for a normal face reckognition
         if face_cords[2] <= self.face_size_param:
-            raise Exception("Face size is smaller than " + str(self.face_size_param) + " pixels") 
-        return True
+            return 0
+        else:
+            return 1
     
-        
     def face_fully_in_picture(self, image_widht, image_hight, face_cords):
         picture_square = image_widht * image_hight
         
@@ -106,11 +126,7 @@ class Face_quality:
             p1 = list_of_unfitted_pixels_cords[-1]
             diff = two_cords_square(p0, p1) - picture_square
         
-        # finally check if face is in picture enough
-        if diff / picture_square > self.face_in_pic_ratio:
-            raise Exception("More than " + str(self.face_in_pic_ratio * 100) + "% of your face is not in the picture") 
-            
-        return True
+        return diff / picture_square
     
     
     def eyes_to_face_ratio(self, image, landmarks):
@@ -154,6 +170,4 @@ class Face_quality:
         final_distance_between_eyes = abs(round(new_r_center[0] * widht) - round(new_l_center[0] * widht))
         eyes_to_face_ratio = final_distance_between_eyes / new_face_cords[2] 
         
-        if eyes_to_face_ratio > 0.35:
-            raise Exception("It seems that your face is turned too much to the side, think about taking another picture") 
-        return True
+        return eyes_to_face_ratio
